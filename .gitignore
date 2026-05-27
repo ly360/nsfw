@@ -1,0 +1,26 @@
+# venv (this project's root happens to be a venv)
+bin/
+lib/
+include/
+share/
+pyvenv.cfg
+
+# nested venv (created by mistake earlier)
+/nsfw/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Editor / OS
+.idea/
+.vscode/
+.claude/
+.DS_Store
+
+# HuggingFace / torch caches (if ever placed in tree)
+.cache/
+
+# Test images (may contain NSFW samples)
+pic/
