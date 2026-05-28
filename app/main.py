@@ -87,6 +87,7 @@ async def audit_image(request: Request, file: UploadFile = File(...)) -> AuditRe
     try:
         falc = bundle.falconsai_classify(image)
         marqo = bundle.marqo_classify(image)
+        luke = bundle.luke_classify(image)
         nude_detections = bundle.nudenet_detect(image_bytes)
     except Exception as exc:
         logger.warning("模型推理失败 filename=%s err=%s", file.filename, exc)
@@ -98,13 +99,16 @@ async def audit_image(request: Request, file: UploadFile = File(...)) -> AuditRe
         marqo_nsfw=marqo.get("nsfw", 0.0),
         nude_top_score=nude_top,
         nude_labels=nude_labels,
+        luke_scores=luke,
     )
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
     logger.info(
-        "audit filename=%s verdict=%s falc=%.3f marqo=%.3f nude=%.3f labels=%s elapsed=%dms",
+        "audit filename=%s verdict=%s falc=%.3f marqo=%.3f nude=%.3f labels=%s luke=%.3f luke_top=%s elapsed=%dms",
         file.filename, result.verdict, result.falconsai_nsfw, result.marqo_nsfw,
-        result.nudenet_top_score, result.nudenet_labels, elapsed_ms,
+        result.nudenet_top_score, result.nudenet_labels, result.luke_nsfw_score,
+        max(result.luke_scores, key=result.luke_scores.get) if result.luke_scores else "-",
+        elapsed_ms,
     )
 
     return AuditResponse(
@@ -115,6 +119,8 @@ async def audit_image(request: Request, file: UploadFile = File(...)) -> AuditRe
             marqo_nsfw=result.marqo_nsfw,
             nudenet_top_score=result.nudenet_top_score,
             nudenet_labels=result.nudenet_labels,
+            luke_nsfw_score=result.luke_nsfw_score,
+            luke_scores=result.luke_scores,
         ),
         elapsed_ms=elapsed_ms,
     )

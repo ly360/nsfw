@@ -12,12 +12,13 @@ import torch
 from PIL import Image
 from nudenet import NudeDetector
 from timm.data import create_transform, resolve_data_config
-from transformers import AutoImageProcessor, AutoModelForImageClassification
+from transformers import AutoImageProcessor, AutoModelForImageClassification, ViTImageProcessor
 import timm
 
 FALCONSAI_MODEL = "Falconsai/nsfw_image_detection"
 MARQO_MODEL = "hf_hub:Marqo/nsfw-image-detection-384"
 MARQO_LABELS = ["nsfw", "sfw"]
+LUKE_MODEL = "LukeJacob2023/nsfw-image-detector"
 
 
 def pick_torch_device() -> torch.device:
@@ -45,6 +46,8 @@ class ModelBundle:
     falc_model: object
     marqo_model: object
     marqo_transform: object
+    luke_processor: object
+    luke_model: object
     nude_detector: NudeDetector
 
     @classmethod
@@ -60,6 +63,10 @@ class ModelBundle:
         cfg = resolve_data_config({}, model=marqo_model)
         marqo_transform = create_transform(**cfg)
 
+        luke_processor = ViTImageProcessor.from_pretrained(LUKE_MODEL)
+        luke_model = AutoModelForImageClassification.from_pretrained(LUKE_MODEL).to(device)
+        luke_model.eval()
+
         nude_detector = NudeDetector(providers=onnx_providers)
 
         return cls(
@@ -69,6 +76,8 @@ class ModelBundle:
             falc_model=falc_model,
             marqo_model=marqo_model,
             marqo_transform=marqo_transform,
+            luke_processor=luke_processor,
+            luke_model=luke_model,
             nude_detector=nude_detector,
         )
 
@@ -85,6 +94,13 @@ class ModelBundle:
             logits = self.marqo_model(x)
         probs = torch.softmax(logits, dim=-1)[0].cpu()
         return {MARQO_LABELS[i]: float(probs[i]) for i in range(len(MARQO_LABELS))}
+
+    def luke_classify(self, image: Image.Image) -> dict[str, float]:
+        inputs = self.luke_processor(images=image, return_tensors="pt").to(self.device)
+        with torch.no_grad():
+            logits = self.luke_model(**inputs).logits
+        probs = torch.softmax(logits, dim=-1)[0].cpu()
+        return {self.luke_model.config.id2label[i].lower(): float(p) for i, p in enumerate(probs)}
 
     def nudenet_detect(self, image_bytes: bytes) -> list[dict]:
         return self.nude_detector.detect(image_bytes)
