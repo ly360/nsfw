@@ -1,0 +1,15 @@
+# NSFW 审计 API 运行依赖（版本与本地 venv 对齐）
+# 注意：torch / torchvision 走 CPU 专用索引单独安装，避免拉 CUDA 大包：
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch==2.12.0 torchvision==0.27.0
+# 然后再：
+#   pip install -r requirements.txt
+
+fastapi==0.136.3
+uvicorn==0.48.0
+python-multipart==0.0.29
+transformers==5.9.0
+timm==1.0.27
+nudenet==3.4.2
+onnxruntime==1.26.0
+pillow==12.2.0
+numpy==2.4.6
