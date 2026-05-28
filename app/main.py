@@ -74,16 +74,23 @@ async def audit_image(request: Request, file: UploadFile = File(...)) -> AuditRe
         )
 
     try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    except UnidentifiedImageError:
-        raise HTTPException(status_code=400, detail="无法解析的图片格式")
+        image = Image.open(io.BytesIO(image_bytes))
+        image.load()
+        image = image.convert("RGB")
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, ValueError) as exc:
+        logger.warning("图片解析失败 filename=%s err=%s", file.filename, exc)
+        raise HTTPException(status_code=400, detail=f"图片损坏或格式无法识别: {exc}")
 
     bundle: ModelBundle = request.app.state.bundle
     t0 = time.perf_counter()
 
-    falc = bundle.falconsai_classify(image)
-    marqo = bundle.marqo_classify(image)
-    nude_detections = bundle.nudenet_detect(image_bytes)
+    try:
+        falc = bundle.falconsai_classify(image)
+        marqo = bundle.marqo_classify(image)
+        nude_detections = bundle.nudenet_detect(image_bytes)
+    except Exception as exc:
+        logger.warning("模型推理失败 filename=%s err=%s", file.filename, exc)
+        raise HTTPException(status_code=400, detail=f"图片无法被模型解析: {exc}")
     nude_top, nude_labels = filter_nudenet(nude_detections)
 
     result = combine(
