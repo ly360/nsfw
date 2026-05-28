@@ -1,4 +1,4 @@
-"""综合判定逻辑：四个模型投票，≥2 票 → NSFW。"""
+"""综合判定逻辑：NudeNet 命中真实暴露部位为必要条件，分类器佐证。"""
 
 from __future__ import annotations
 
@@ -55,24 +55,29 @@ def combine(
 ) -> AuditResult:
     luke_nsfw = sum(luke_scores.get(label, 0.0) for label in LUKE_NSFW_LABELS)
 
-    votes: list[str] = []
+    # 分类器仅作佐证：整图分类器对游戏 UI/卡通/肤色会给出 1.00 的高置信误判，
+    # 不能单独定 NSFW，只用于在 NudeNet 命中后附议。
+    classifier_votes: list[str] = []
     if falc_nsfw >= NSFW_THRESHOLD:
-        votes.append(f"Falconsai={falc_nsfw:.2f}")
+        classifier_votes.append(f"Falconsai={falc_nsfw:.2f}")
     if marqo_nsfw >= NSFW_THRESHOLD:
-        votes.append(f"Marqo={marqo_nsfw:.2f}")
-    if nude_labels:
-        votes.append(f"NudeNet={'+'.join(nude_labels)}")
+        classifier_votes.append(f"Marqo={marqo_nsfw:.2f}")
     if luke_nsfw >= LUKE_THRESHOLD:
         top = max(LUKE_NSFW_LABELS, key=lambda l: luke_scores.get(l, 0.0))
-        votes.append(f"Luke={luke_nsfw:.2f}({top}={luke_scores.get(top, 0.0):.2f})")
+        classifier_votes.append(f"Luke={luke_nsfw:.2f}({top}={luke_scores.get(top, 0.0):.2f})")
 
-    verdict = "NSFW" if len(votes) >= 2 else "SAFE"
-    if not votes:
-        reason = "-"
-    elif verdict == "NSFW":
-        reason = " | ".join(votes)
+    # NudeNet 检测到真实暴露部位是必要条件；再要求至少 1 个分类器附议。
+    nudenet_hit = bool(nude_labels)
+    verdict = "NSFW" if (nudenet_hit and classifier_votes) else "SAFE"
+
+    if verdict == "NSFW":
+        reason = f"NudeNet={'+'.join(nude_labels)} | " + " | ".join(classifier_votes)
+    elif nudenet_hit:
+        reason = f"NudeNet 命中但无分类器佐证: NudeNet={'+'.join(nude_labels)}"
+    elif classifier_votes:
+        reason = f"NudeNet 未命中暴露部位，忽略分类器: {' | '.join(classifier_votes)}"
     else:
-        reason = f"单票忽略: {' | '.join(votes)}"
+        reason = "-"
     return AuditResult(
         verdict=verdict,
         reason=reason,
